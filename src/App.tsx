@@ -7,6 +7,7 @@ import { match } from "ts-pattern"
 import "@excalidraw/excalidraw/index.css"
 
 const NEAT_ROUGHNESS: number = 0
+const DIAMOND_SEED: number = 1
 const STORAGE_KEY_THEME: string = "excalidraw-theme"
 const STORAGE_KEY_DRAWING: string = "excalidraw-drawing"
 
@@ -23,6 +24,20 @@ function shouldNeatify(element: ExcalidrawElement): boolean {
     .with("arrow", () => true)
     .with("freedraw", () => true)
     .otherwise(() => false)
+}
+
+function isDirty(element: ExcalidrawElement): boolean {
+  if ((element as any).roughness !== NEAT_ROUGHNESS) { return true }
+  if (element.type === "diamond" && (element as any).seed !== DIAMOND_SEED) { return true }
+  return false
+}
+
+function neatifyProps(element: ExcalidrawElement): object {
+  let base: object = { roughness: NEAT_ROUGHNESS }
+
+  return match(element.type)
+    .with("diamond", () => ({ ...base, seed: DIAMOND_SEED }))
+    .otherwise(() => base)
 }
 
 function loadTheme(): Theme {
@@ -52,22 +67,20 @@ export default function App(): JSX.Element {
       if (excalidrawAPI.current == null) { return }
 
       let dirtyElements: ExcalidrawElement[] = (elements as ExcalidrawElement[]).filter(
-        (el) => shouldNeatify(el) && (el as any).roughness !== NEAT_ROUGHNESS,
+        (el) => shouldNeatify(el) && isDirty(el),
       )
 
       if (dirtyElements.length > 0) {
         isUpdating.current = true
         for (let element of dirtyElements) {
-          mutateElement(element, { roughness: NEAT_ROUGHNESS }, false)
+          mutateElement(element, neatifyProps(element), false)
         }
         isUpdating.current = false
       }
 
-      // Persist theme immediately (cheap)
       let theme: Theme = appState.theme === "dark" ? "dark" : "light"
       localStorage.setItem(STORAGE_KEY_THEME, theme)
 
-      // Debounce drawing save (can be large)
       if (saveTimeout.current != null) { clearTimeout(saveTimeout.current) }
       saveTimeout.current = setTimeout(() => {
         if (excalidrawAPI.current == null) { return }
